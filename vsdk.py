@@ -2,7 +2,8 @@ import urllib
 import re
 import os
 import shutil
-import requests
+import httplib
+import urlparse
 
 # documentation for creating docsets for Dash: http://kapeli.com/docsets/
 
@@ -32,22 +33,21 @@ def create_tokens(out_path):
     print >>out_file, "</Tokens>"
 
 def crawl():
-    http_session = requests.Session()
+    conn = httplib.HTTPConnection(urlparse.urlsplit(base_url).netloc, httplib.HTTP_PORT)
     
     visited_urls = []
     urls_to_visit = ["index.html"]
     
     while len(urls_to_visit) > 0:
-        cur_url = urls_to_visit[0]
-        urls_to_visit = urls_to_visit[1:]
+        cur_url = urls_to_visit.pop(0)
         local_url = os.path.join(root_path, cur_url)
         remote_url = base_url + cur_url
         print cur_url, "(%d remaining)" % len(urls_to_visit)
         if os.path.exists(local_url):
             cur_url_html = open(local_url, "rb").read()
         else:
-            response = http_session.get(remote_url)
-            cur_url_html = response.raw.read()
+            conn.request("GET", urlparse.urlsplit(remote_url).path)
+            cur_url_html = conn.getresponse().read()
             open(local_url, "wb").write(cur_url_html)
         visited_urls.append(cur_url)
         new_urls = re.findall("(?:href|src)=['\"](?:\./)?([A-Za-z0-9-\._]+\.(?:html|js|css|png|jpg|gif))['\"]", cur_url_html, re.I)
@@ -56,7 +56,8 @@ def crawl():
         urls_to_visit.extend(new_urls)
 
 def main():
-    os.system("mkdir -p {}".format(root_path))
+    if not os.path.exists(root_path):
+        os.makedirs(root_path)
     crawl()
     create_tokens("vSphereAPI.docset/Contents/Resources/Tokens.xml")
     shutil.copy("static/icon.png", "vSphereAPI.docset/")
